@@ -24,3 +24,10 @@ hs_err_pid*
 
 target/
 /bin/
+
+# IntelliJ project files
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea/**
