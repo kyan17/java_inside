@@ -6,10 +6,6 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="interceptor" />
-        <module name="mapper" />
-        <module name="orm" />
-        <module name="injector" />
       </profile>
     </annotationProcessing>
   </component>

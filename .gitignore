@@ -31,3 +31,9 @@ target/
 *.ipr
 *.iws
 .idea/**
+.idea/workspace.xml
+.idea/compiler.xml
+
+# Mac OS X files
+.DS_Store
+.DS_Store?

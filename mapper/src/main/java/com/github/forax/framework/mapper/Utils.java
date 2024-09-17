@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.RandomAccess;
 
 final class Utils {
+
   private Utils() {
     throw new AssertionError();
   }

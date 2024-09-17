@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SuppressWarnings({"unused", "static-method"})
 public class JSONWriterTest {
-  /*
+
   @Nested
   public class Q1 {
     @Test @Tag("Q1")
@@ -33,7 +33,6 @@ public class JSONWriterTest {
       );
     }
   }  // end of Q1
-
 
   public static class Car {
     private final String owner;
@@ -105,7 +104,6 @@ public class JSONWriterTest {
 
   } // end of Q2
 
-
   public static final class Person {
     private final String firstName;
     private final String lastName;
@@ -126,6 +124,27 @@ public class JSONWriterTest {
     }
   }
 
+  @Nested
+  public class Q3 {
+    @Test @Tag("Q3")
+    public void toJSONWithJSONProperty() {
+      var writer = new JSONWriter();
+      var person = new Person("James", "Bond");
+      var json = writer.toJSON(person);
+      var expected1 = """
+          {"first-name": "James", "last-name": "Bond"}\
+          """;
+      var expected2 = """
+          {"last-name": "Bond", "first-name": "James"}\
+          """;
+      assertTrue(
+          json.equals(expected1) || json.equals(expected2),
+          "error: " + json + "\n expects either " + expected1 + " or " + expected2
+      );
+    }
+
+  } // end of Q3
+
   public static class StartDate {
     private final LocalDateTime time;
 
@@ -138,7 +157,7 @@ public class JSONWriterTest {
     }
   }
 
-
+  /*
   @Nested
   public class Q5 {
     @Test @Tag("Q5")
@@ -191,7 +210,6 @@ public class JSONWriterTest {
     }
 
   } // end of Q6
-
 
   public static class AddressInfo {
     private boolean international;
@@ -252,5 +270,5 @@ public class JSONWriterTest {
     }
 
   }  // end of Q7
- */
+*/
 }
