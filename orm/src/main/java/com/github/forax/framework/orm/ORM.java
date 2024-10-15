@@ -11,10 +11,7 @@ import java.io.Serial;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -22,7 +19,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static java.util.Collections.nCopies;
 
 public final class ORM {
 
@@ -39,7 +39,10 @@ public final class ORM {
       CONNECTION_LOCAL.set(connection);
       try {
         block.run();
-      }  catch (Exception e) {
+      } catch (UncheckedSQLException e) {
+        connection.rollback();
+        throw e.getCause();
+      } catch (Exception e) {
         connection.rollback();
         throw e;
       } finally {
@@ -72,38 +75,116 @@ public final class ORM {
     if (getter != null) {
       var column = getter.getAnnotation(Column.class);
       name = (column != null)? column.value() : property.getName();
-    } else name = property.getName();
+    } else {
+      name = property.getName();
+    }
     return name.toUpperCase(Locale.ROOT);
   }
 
-  private static String setCorrectType(PropertyDescriptor property) {
-
+  private static String createTableQuery(Class<?> beanType) {
+    var beanInfo = Utils.beanInfo(beanType);
+    var joiner = new StringJoiner(",\n", "(\n", "\n)");
+    for (var property: beanInfo.getPropertyDescriptors()) {
+      var propertyName = property.getName();
+      if (propertyName.equals("class")) continue;
+      var columnName = findColumnName(property);
+      var propertyType = property.getPropertyType();
+      var typeName = TYPE_MAPPING.get(propertyType);
+      if (typeName == null)
+        throw new UnsupportedOperationException("unknown type mapping for type " + propertyType.getName());
+      var nullable = (propertyType.isPrimitive())? " NOT NULL" : "";
+      var getter = property.getReadMethod();
+      var autoincrement = (getter.isAnnotationPresent(GeneratedValue.class))? " AUTO_INCREMENT" : "";
+      joiner.add(columnName + ' ' + typeName + nullable + autoincrement);
+      if (getter.isAnnotationPresent(Id.class)) joiner.add("PRIMARY KEY (" + columnName + ')');
+    }
+    var tableName = findTableName(beanType);
+    return "CREATE TABLE " + tableName + joiner + ";";
   }
 
-  public static void createTable(Class<?> beanClass) throws SQLException {
-    Objects.requireNonNull(beanClass);
-    var builder = new StringBuilder();
-    builder.append("CREATE TABLE ").append(findTableName(beanClass)).append(" (\n");
-    var beanInfo = Utils.beanInfo(beanClass);
-    var separator = "";
-    String primaryColumn = null;
-    for (var property : beanInfo.getPropertyDescriptors()) {
-      if (property.getName().equals("class")) continue;
-      var column = findColumnName(property);
-      if (isPrimaryKey(property)) primaryColumn = column;
-      var type = TYPE_MAPPING.getOrDefault(property.getPropertyType(), DEFAULT_TYPE);
-      builder.append(separator).append(column).append(' ').append(type);
-      separator = ", \n";
-    }
-    if (primaryColumn != null)
-      builder.append("PRIMARY KEY (").append(primaryColumn).append(")");
-    builder.append(')');
-    var query = builder.toString(); // Donnée importante, on la stocke dans un variable
+  public static void createTable(Class<?> beanType) throws SQLException {
+    var sqlQuery = createTableQuery(beanType);
     var connection = currentConnection();
     try (var statement = connection.createStatement()) {
-      statement.execute(query);
+      statement.executeUpdate(sqlQuery);
     }
-    connection.commit(); // Pas obligatoire, car les CREATE TABLE sont toujours en auto commit
+    connection.commit(); // Pas obligatoire car la création de table est toujours en auto commit
+  }
+
+  static Object toEntityClass(ResultSet resultSet, BeanInfo beanInfo, Constructor<?> constructor) throws SQLException {
+    var instance = Utils.newInstance(constructor);
+    for( var property: beanInfo.getPropertyDescriptors()) {
+      var propertyName = property.getName();
+      if (propertyName.equals("class")) continue;
+      var value = resultSet.getObject(propertyName);
+      Utils.invokeMethod(instance, property.getWriteMethod(), value);
+    }
+    return instance;
+  }
+
+  static List<Object> findAll(
+    Connection connection, String sqlQuery, BeanInfo beanInfo, Constructor<?> constructor
+  ) throws SQLException {
+    var list = new ArrayList<>();
+    try (var statement = connection.prepareStatement(sqlQuery)) {
+      try (var resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          var bean = toEntityClass(resultSet, beanInfo, constructor);
+          list.add(bean);
+        }
+      }
+    }
+    return list;
+  }
+
+  static String createSaveQuery(String tableName, BeanInfo beanInfo) {
+    var properties = beanInfo.getPropertyDescriptors();
+    return "INSERT INTO " + tableName + " " +
+      Arrays.stream(properties)
+        .filter(property -> !property.getName().equals("class"))
+        .map(ORM::findColumnName)
+        .collect(Collectors.joining(", ", "(", ")"))
+      + " VALUES (" + String.join(", ", nCopies(properties.length - 1, "?")) + ");";
+  }
+
+  static Object save(
+    Connection connection, String tableName, BeanInfo beanInfo, Object bean, String idProperty
+  ) throws SQLException {
+    var sqlQuery = createSaveQuery(tableName, beanInfo);
+    try (var statement = connection.prepareStatement(sqlQuery, Statement.RETURN_GENERATED_KEYS)) {
+      var index = 1;
+      for (var property: beanInfo.getPropertyDescriptors()) {
+        if (property.getName().equals("class")) continue;
+        var getter = property.getReadMethod();
+        var value = Utils.invokeMethod(bean, getter);
+        statement.setObject(index++, value);
+      }
+      statement.executeUpdate();
+    }
+    connection.commit();
+    return bean;
+  }
+
+  public static <T extends Repository<?, ?>> T createRepository(Class<T> repositoryType) {
+    var beanType = findBeanTypeFromRepository(repositoryType);
+    var beanInfo = Utils.beanInfo(beanType);
+    var constructor = Utils.defaultConstructor(beanType);
+    var tableName = findTableName(beanType);
+    return repositoryType.cast(Proxy.newProxyInstance(repositoryType.getClassLoader(),
+            new Class<?>[] {repositoryType}, (proxy, method, args) -> {
+      var connection = currentConnection();
+      try {
+        return switch (method.getName()) {
+          case "findAll" -> findAll(connection, "SELECT * FROM " + tableName, beanInfo, constructor);
+          case "save" -> save(connection, tableName, beanInfo, args[0], null);
+          case "equals", "hashCode", "toString" ->
+                  throw new UnsupportedOperationException("method " + method.getName() + " not supported");
+          default -> throw new IllegalStateException("method " + method.getName() + " not supported");
+        };
+      } catch (SQLException e) {
+        throw new UncheckedSQLException(e);
+      }
+    }));
   }
 
   // Forax Code :
