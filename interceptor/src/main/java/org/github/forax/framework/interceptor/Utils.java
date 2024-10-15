@@ -29,4 +29,5 @@ final class Utils {
   private static <T extends Throwable> AssertionError rethrow(Throwable cause) throws T {
     throw (T) cause;
   }
+
 }

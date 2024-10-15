@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SuppressWarnings("static-method")
 public class ORMTest {
-  /*
+
   @Nested
   public class Q1 {
     @Test @Tag("Q1")
@@ -82,7 +82,6 @@ public class ORMTest {
       );
     }
   }
-
 
   @Nested
   public class Q2 {
@@ -189,7 +188,6 @@ public class ORMTest {
     }
   }
 
-
   @SuppressWarnings("unused")
   public static final class Furniture {
     private String name;
@@ -206,7 +204,6 @@ public class ORMTest {
   public static final class EmptyBean {
     public EmptyBean() { }
   }
-
 
   @Nested
   public class Q3 {
@@ -379,7 +376,6 @@ public class ORMTest {
     }
   }
 
-
   @SuppressWarnings("unused")
   public static final class Point {
     private Long id;
@@ -433,6 +429,7 @@ public class ORMTest {
     }
   }
 
+  /*
   @Nested
   public class Q5 {
 
