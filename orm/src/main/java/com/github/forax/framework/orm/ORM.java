@@ -108,7 +108,7 @@ public final class ORM {
     try (var statement = connection.createStatement()) {
       statement.executeUpdate(sqlQuery);
     }
-    connection.commit(); // Pas obligatoire car la création de table est toujours en auto commit
+    connection.commit(); // Pas obligatoire, car la création de table est toujours en auto commit
   }
 
   static Object toEntityClass(ResultSet resultSet, BeanInfo beanInfo, Constructor<?> constructor) throws SQLException {
@@ -147,8 +147,15 @@ public final class ORM {
       + " VALUES (" + String.join(", ", nCopies(properties.length - 1, "?")) + ");";
   }
 
+  static PropertyDescriptor findPropertyId(Class<?> beanType, BeanInfo beanInfo, String propertyName) {
+    return Arrays.stream(beanInfo.getPropertyDescriptors())
+      .filter(property -> property.getName().equals(propertyName))
+      .findFirst()
+      .orElseThrow(() -> new IllegalStateException("no property " + propertyName + " found for type " + beanType.getName()));
+  }
+
   static Object save(
-    Connection connection, String tableName, BeanInfo beanInfo, Object bean, String idProperty
+    Connection connection, String tableName, BeanInfo beanInfo, Object bean, PropertyDescriptor idProperty
   ) throws SQLException {
     var sqlQuery = createSaveQuery(tableName, beanInfo);
     try (var statement = connection.prepareStatement(sqlQuery, Statement.RETURN_GENERATED_KEYS)) {
@@ -160,6 +167,15 @@ public final class ORM {
         statement.setObject(index++, value);
       }
       statement.executeUpdate();
+      if (idProperty != null) {
+        try (var resultSet = statement.getGeneratedKeys()) {
+          if (resultSet.next()) {
+            var key = resultSet.getObject(1);
+            var setter = idProperty.getWriteMethod();
+            Utils.invokeMethod(bean, setter, key);
+          }
+        }
+      }
     }
     connection.commit();
     return bean;
@@ -170,13 +186,14 @@ public final class ORM {
     var beanInfo = Utils.beanInfo(beanType);
     var constructor = Utils.defaultConstructor(beanType);
     var tableName = findTableName(beanType);
+    var idProperty = findPropertyId(beanType, beanInfo, "id");
     return repositoryType.cast(Proxy.newProxyInstance(repositoryType.getClassLoader(),
             new Class<?>[] {repositoryType}, (proxy, method, args) -> {
       var connection = currentConnection();
       try {
         return switch (method.getName()) {
           case "findAll" -> findAll(connection, "SELECT * FROM " + tableName, beanInfo, constructor);
-          case "save" -> save(connection, tableName, beanInfo, args[0], null);
+          case "save" -> save(connection, tableName, beanInfo, args[0], idProperty);
           case "equals", "hashCode", "toString" ->
                   throw new UnsupportedOperationException("method " + method.getName() + " not supported");
           default -> throw new IllegalStateException("method " + method.getName() + " not supported");
