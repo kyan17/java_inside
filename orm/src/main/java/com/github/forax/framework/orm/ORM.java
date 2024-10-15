@@ -139,7 +139,7 @@ public final class ORM {
 
   static String createSaveQuery(String tableName, BeanInfo beanInfo) {
     var properties = beanInfo.getPropertyDescriptors();
-    return "INSERT INTO " + tableName + " " +
+    return "MERGE INTO " + tableName + " " +
       Arrays.stream(properties)
         .filter(property -> !property.getName().equals("class"))
         .map(ORM::findColumnName)
