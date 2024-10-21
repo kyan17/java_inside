@@ -1044,7 +1044,6 @@ public class ORMTest {
     }
   }
 
-  /*
   @Nested
   public class Q12 {
 
@@ -1117,28 +1116,30 @@ public class ORMTest {
 
   }
 
-
   @Nested
   class Q13 {
 
     @Test @Tag("Q13")
     public void testFindPropertyBalance() {
       var beanInfo = Utils.beanInfo(Account.class);
-      var property = ORM.findProperty(beanInfo, "balance");
+      var beanType = Account.class.getComponentType();
+      var property = ORM.findProperty(beanType, beanInfo, "balance");
       assertEquals("balance", property.getName());
     }
 
     @Test @Tag("Q13")
     public void testFindPropertyId() {
       var beanInfo = Utils.beanInfo(Account.class);
-      var property = ORM.findProperty(beanInfo, "id");
+      var beanType = Account.class.getComponentType();
+      var property = ORM.findProperty(beanType, beanInfo, "id");
       assertEquals("id", property.getName());
     }
 
     @Test @Tag("Q13")
     public void testFindNoProperty() {
       var beanInfo = Utils.beanInfo(Account.class);
-      assertThrows(IllegalStateException.class, () ->  ORM.findProperty(beanInfo, "noproperty"));
+      var beanType = Account.class;
+      assertThrows(IllegalStateException.class, () ->  ORM.findProperty(beanType, beanInfo, "noproperty"));
     }
 
     @Test @Tag("Q13")
@@ -1258,5 +1259,5 @@ public class ORMTest {
     }
 
   }
-  */
+
 }
